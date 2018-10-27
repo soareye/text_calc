@@ -1,0 +1,11 @@
+.background {
+    -fx-background-color: #e8d5b9;
+}
+
+.inputFieldBox {
+    -fx-padding: 0 10 0 0;
+}
+
+.resultBox {
+    -fx-padding: 10 0 0 0;
+}
