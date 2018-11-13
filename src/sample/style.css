@@ -1,11 +1,17 @@
-.background {
-    -fx-background-color: #e8d5b9;
+.pane {
+    -fx-min-height: 150;
+    -fx-min-width: 500;
+    -fx-padding: 5;
 }
 
-.inputFieldBox {
-    -fx-padding: 0 10 0 0;
+.inputField {
+    -fx-background-color: none;
+    -fx-border-color: none;
+    -fx-border-width: 0;
+    -fx-padding: 0;
+    -fx-font-size: 17;
 }
 
-.resultBox {
-    -fx-padding: 10 0 0 0;
+.result {
+    -fx-font-size: 17;
 }
