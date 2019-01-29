@@ -16,15 +16,15 @@ public class MathExpParser {
     }
 
     /* Parses a mathematical expression in the form of a string
-    * from a given index and returning earlier if we're parsing
-    * an exponent: */
-    private static double parse(String expression, int from, boolean isExponent) throws ParseException {
-        if (expression.length() == 0)
-            throw new ParseException(expression, 0);
+    * from a given index, changing behavior if it's parsing the
+    * argument of a function: */
+    private static double parse(String expression, int from, boolean isArg) throws ParseException {
+
+        MathExpValidator.validateExp(expression);
 
         double result = 0;
 
-        /* "product" holds the result of recent multiplications and divisions
+        /* "product" is the result of recent multiplications and divisions
         * because we need to finish multiplying and dividing before adding
         * it to result: */
         double product = 0;
@@ -39,33 +39,28 @@ public class MathExpParser {
         * build the number as we go: */
         StringBuilder numStrBuilder = new StringBuilder();
 
-        for (int i = from; i < expression.length(); i++) {
+        int i = from;
+        while (i < expression.length()) {
+
             String currentSymbol = String.valueOf(expression.charAt(i));
+            String currentString = getText(expression, i);
 
             if (currentSymbol.matches("[\\d.]")) {
                 numStrBuilder.append(currentSymbol);
                 curNum = Double.parseDouble(numStrBuilder.toString());
 
             } else if (currentSymbol.matches("[*/+\\-]")) {
-                /* Sequential operation-symbols or starting with an operation that's not minus or
-                * ending with any operation-symbol is illegal syntax: */
-                if ((i > 0 && String.valueOf(expression.charAt(i - 1)).matches("[*/+\\-]")) ||
-                        (i == 0 && !currentSymbol.matches("-")) ||
-                        i == expression.length() - 1) {
-
-                    throw new ParseException(expression, i);
-                }
 
                 product = binaryOps(prevOp, product, curNum);
 
-                if (isExponent && !(currentSymbol.matches("-") && i == from))
+                if (isArg && !(currentSymbol.matches("-") && i == from))
                     return result + product;
 
                 numStrBuilder = new StringBuilder();
                 prevOp = currentSymbol;
 
                 // If the current symbol is + or -, we no longer need any memory
-                // of what came previously and we can add product to result:
+                // of previous products and we can add product to result:
                 if (currentSymbol.matches("[+\\-]")) {
                     result += product;
                     product = 0;
@@ -74,11 +69,14 @@ public class MathExpParser {
             } else if (currentSymbol.matches("\\^")) {
                 double exponent = parse(expression, i + 1, true);
                 curNum = Math.pow(curNum, exponent);
-                i = traversePow(expression, i + 1);
+                i = findIndexAfterArg(expression, i + 1);
+
+            } else if (currentSymbol.matches("!")) {
+                curNum = factorial(curNum);
 
             } else if (currentSymbol.matches("\\(")) {
                 curNum = parse(expression, i + 1, false);
-                i = traverseParentheses(expression, i + 1);
+                i = findIndexAfterParentheses(expression, i + 1);
 
             } else if (currentSymbol.matches("\\)")) {
                 // If it's the end of a parenthesized expression, perform the
@@ -87,24 +85,21 @@ public class MathExpParser {
                 product = binaryOps(prevOp, product, curNum);
                 return result + product;
 
-            } else if (matchesUnaryOps(expression, i)) {
-                String curOp = getCurOp(expression, i);
-                double arg = parse(expression, i + curOp.length() + 1, false);
+            } else if (matchesUnaryOps(currentString)) {
+                i += currentString.length();
+                double arg = parse(expression, i, true);
+                curNum = additionalUnaryOps(currentString, arg);
+                i = findIndexAfterArg(expression, i);
 
-                curNum = additionalUnaryOps(curOp, arg);
-                i = traverseParentheses(expression, i + curOp.length() + 1);
-
-            } else if (currentSymbol.matches("!")) {
-                if (isInt(curNum)) {
-                    curNum = factorial(curNum);
-
-                } else {
-                    throw new ParseException(expression, i);
-                }
+            } else if (matchesNumSymbol(currentString)) {
+                curNum = numSyms(currentString);
+                i += currentString.length() - 1;
 
             } else {
                 throw new ParseException(expression, i);
             }
+
+            i++;
         }
 
         // Finish up by combining product and curNum, adding it to result and returning:
@@ -112,41 +107,39 @@ public class MathExpParser {
         return result + product;
     }
 
-    private static double binaryOps(String op, double product, double secArg) {
+    private static double binaryOps(String op, double firstArg, double secArg) {
         if (op.matches("-")) {
-            return -secArg;
+            return firstArg - secArg;
 
         } else if (op.matches("\\*")) {
-            return product * secArg;
+            return firstArg * secArg;
 
         } else if (op.matches("/")) {
-            return product / secArg;
+            return firstArg / secArg;
 
         } else {
-            return secArg;
+            return firstArg + secArg;
         }
     }
 
-    private static boolean matchesUnaryOps(String expression, int index) {
-        String opNames[] = {"sin", "cos", "tan", "asin", "acos", "atan", "sqrt"};
-        String longest = Arrays.stream(opNames)
-                .reduce("", (x, y)-> x.length() > y.length() ? x : y);
-
-        if (index + longest.length() > expression.length())
-            return false;
-
-        for (String opName : opNames) {
-            String op = expression.substring(index, index + opName.length());
-            if (opName.equals(op)) return true;
-        }
-
-        return false;
+    private static boolean matchesUnaryOps(String curOp) {
+        String opNames[] = {"sin", "cos", "tan", "asin", "acos", "atan", "sqrt", "log"};
+        return Arrays.stream(opNames).anyMatch(str->str.matches(curOp));
     }
 
-    private static String getCurOp(String expression, int index) {
+    private static boolean matchesNumSymbol(String numSymbol) {
+        String numSymbols[] = {"e", "pi"};
+        return Arrays.stream(numSymbols).anyMatch(str->str.matches(numSymbol));
+    }
+
+    /* Gets a string of letters, starting at the current index if there are any.
+    * This is used to get operators, like "cos", or values with names, like "pi", in
+    * an expression. */
+    private static String getText(String expression, int index) {
         StringBuilder stringBuilder = new StringBuilder();
 
-        while (index < expression.length() && expression.charAt(index) != '(') {
+        while (index < expression.length() &&
+                String.valueOf(expression.charAt(index)).matches("[a-z]")) {
             stringBuilder.append(expression.charAt(index));
             index++;
         }
@@ -176,12 +169,24 @@ public class MathExpParser {
         } else if (curOp.matches("sqrt")) {
             return Math.sqrt(arg);
 
+        } else if (curOp.matches("log")) {
+            return Math.log(arg);
         } else {
             return 0;
         }
     }
 
-    private static int traverseParentheses(String expression, int i) {
+    private static double numSyms(String curSym) {
+        if (curSym.matches("e")) {
+            return Math.exp(1);
+        } else if (curSym.matches("pi")) {
+            return Math.PI;
+        } else {
+            return 0;
+        }
+    }
+
+    private static int findIndexAfterParentheses(String expression, int i) {
         int depth = 0;
         while (i < expression.length() && !(expression.charAt(i) == ')' && depth == 0)) {
             if (expression.charAt(i) == '(') depth++;
@@ -192,15 +197,17 @@ public class MathExpParser {
         return i;
     }
 
-    private static int traversePow(String expression, int i) {
+    private static int findIndexAfterArg(String expression, int i) {
         int start = i;
 
+        /* Arguments are done when the index is at the end of the expression or when
+        * the current char matches '+', '-', '*' or '/' and current char is
+        * not first char */
         while (i < expression.length() &&
-                (!String.valueOf(expression.charAt(i)).matches("[+*/]") &&
-                !(String.valueOf(expression.charAt(i)).matches("-") && i > start))) {
+                !(String.valueOf(expression.charAt(i)).matches("[+\\-*/]") && i > start)) {
 
             if (expression.charAt(i) == '(')
-                i = traverseParentheses(expression, i + 1);
+                i = findIndexAfterParentheses(expression, i + 1);
 
             i++;
         }
@@ -208,30 +215,13 @@ public class MathExpParser {
         return i - 1;
     }
 
-    private static double unaryPostfixOps(String nextSym, double curNum) {
-        if (nextSym.matches("!"))
-            return factorial(curNum);
-
-        return curNum;
-    }
-
+    // Recursion 101
     private static double factorial(double n) {
-        if (n < 0)
-            throw new IllegalArgumentException("n less than 0.");
-
-        return fact(n);
-    }
-
-    private static double fact(double n) {
         if (n > 0) {
-            return n * fact(n - 1);
+            return n * factorial(n - 1);
 
         } else {
             return 1;
         }
-    }
-
-    private static boolean isInt(double n) {
-        return (int)(n) - n == 0;
     }
 }

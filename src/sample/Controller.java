@@ -52,46 +52,48 @@ public class Controller implements Initializable {
 
     @FXML
     private void handleInput() {
-        if (resultNotAdded) {
-            vBox.getChildren().remove(inputField);
-            vBox.getChildren().addAll(result, inputField);
-            resultNotAdded = false;
-        }
-
         String input = Arrays.stream(inputField.getText().split(""))
                 .filter(x->x.matches("\\S"))
                 .reduce("", (x, y)->x+y);
 
-        if (input.matches("clear")) {
-            result.setText("");
-            vBox.getChildren().remove(result);
-            resultNotAdded = true;
+        if (!input.matches("")) {
+            if (resultNotAdded) {
+                vBox.getChildren().remove(inputField);
+                vBox.getChildren().addAll(result, inputField);
+                resultNotAdded = false;
+            }
 
-        } else {
-            calculate(input);
+            if (input.matches("clear")) {
+                result.setText("");
+                vBox.getChildren().remove(result);
+                resultNotAdded = true;
+
+            } else {
+                calculate(input);
+            }
         }
 
         inputField.setText("");
     }
 
     private void calculate(String input) {
-        String calcResult = null;
+        String calcResult;
+
         try {
-            calcResult = String.valueOf(MathExpParser.calculate(input));
-
-        } catch (ParseException e) {
-            result.setText(result.getText() + "\n" + "Invalid expression");
-        }
-
-        if (calcResult != null) {
-            double shit = Double.parseDouble(calcResult);
+            double shit = MathExpParser.calculate(input);
             int trash = (int)shit;
             if (trash - shit == 0) calcResult = String.valueOf(trash);
+            else calcResult = String.valueOf(shit);
 
-            if (result.getText().matches(""))
-                result.setText(input + " = " + calcResult);
-            else
-                result.setText(result.getText() + "\n" + input + " = " + calcResult);
+        } catch (ParseException e) {
+            calcResult = "Error at index: " + e.getErrorOffset();
+            e.printStackTrace();
         }
+
+        if (result.getText().matches(""))
+            result.setText(input + " = " + calcResult);
+
+        else
+            result.setText(result.getText() + "\n" + input + " = " + calcResult);
     }
 }
